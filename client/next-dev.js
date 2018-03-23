@@ -1,8 +1,8 @@
 import stripAnsi from 'strip-ansi'
 import initNext, * as next from './'
 import ErrorDebugComponent from '../lib/error-debug'
-import initOnDemandEntries from './on-demand-entries-client'
-import initWebpackHMR from './webpack-hot-middleware-client'
+// import initOnDemandEntries from './on-demand-entries-client'
+// import initWebpackHMR from './webpack-hot-middleware-client'
 
 require('@zeit/source-map-support/browser-source-map-support')
 
@@ -10,8 +10,9 @@ window.next = next
 
 initNext({ ErrorDebugComponent, stripAnsi })
   .then((emitter) => {
-    initOnDemandEntries()
-    initWebpackHMR()
+    // Turn Off HMR
+    // initOnDemandEntries()
+    // initWebpackHMR()
 
     let lastScroll
 
