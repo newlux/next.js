@@ -39,8 +39,6 @@ export default class Server {
     this.nextConfig = getConfig(phase, this.dir, conf)
     this.dist = this.nextConfig.distDir
 
-    this.hotReloader = dev ? this.getHotReloader(this.dir, { quiet, config: this.nextConfig }) : null
-
     if (dev) {
       updateNotifier(pkg, 'next')
     }
@@ -59,7 +57,6 @@ export default class Server {
       staticMarkup,
       dir: this.dir,
       dist: this.dist,
-      hotReloader: this.hotReloader,
       buildId: this.buildId,
       availableChunks: dev ? {} : getAvailableChunks(this.dir, this.dist),
       generateEtags
@@ -79,11 +76,6 @@ export default class Server {
 
     this.setAssetPrefix(assetPrefix)
     this.defineRoutes()
-  }
-
-  getHotReloader (dir, options) {
-    const HotReloader = require('./hot-reloader').default
-    return new HotReloader(dir, options)
   }
 
   handleRequest (req, res, parsedUrl) {
@@ -116,16 +108,9 @@ export default class Server {
   }
 
   async prepare () {
-    if (this.hotReloader) {
-      await this.hotReloader.start()
-    }
   }
 
   async close () {
-    if (this.hotReloader) {
-      await this.hotReloader.stop()
-    }
-
     if (this.http) {
       await new Promise((resolve, reject) => {
         this.http.close((err) => {
@@ -213,15 +198,6 @@ export default class Server {
       '/_next/:buildId/page/:path*.js.map': async (req, res, params) => {
         const paths = params.path || ['']
         const page = `/${paths.join('/')}`
-
-        if (this.dev) {
-          try {
-            await this.hotReloader.ensurePage(page)
-          } catch (err) {
-            await this.render404(req, res)
-          }
-        }
-
         const path = join(this.dir, this.dist, 'bundles', 'pages', `${page}.js.map`)
         await serveStatic(req, res, path)
       },
@@ -247,19 +223,6 @@ export default class Server {
         if (!this.handleBuildId(params.buildId, res)) {
           const error = new Error('INVALID_BUILD_ID')
           return await renderScriptError(req, res, page, error)
-        }
-
-        if (this.dev) {
-          try {
-            await this.hotReloader.ensurePage(page)
-          } catch (error) {
-            return await renderScriptError(req, res, page, error)
-          }
-
-          const compilationErr = await this.getCompilationError()
-          if (compilationErr) {
-            return await renderScriptError(req, res, page, compilationErr)
-          }
         }
 
         const p = join(this.dir, this.dist, 'bundles', 'pages', `${page}.js`)
@@ -323,10 +286,6 @@ export default class Server {
   }
 
   async run (req, res, parsedUrl) {
-    if (this.hotReloader) {
-      await this.hotReloader.run(req, res)
-    }
-
     const fn = this.router.match(req, res, parsedUrl)
     if (fn) {
       await fn()
@@ -362,14 +321,6 @@ export default class Server {
   }
 
   async renderToHTML (req, res, pathname, query) {
-    if (this.dev) {
-      const compilationErr = await this.getCompilationError()
-      if (compilationErr) {
-        res.statusCode = 500
-        return this.renderErrorToHTML(compilationErr, req, res, pathname, query)
-      }
-    }
-
     try {
       const out = await renderToHTML(req, res, pathname, query, this.renderOpts)
       return out
@@ -391,14 +342,6 @@ export default class Server {
   }
 
   async renderErrorToHTML (err, req, res, pathname, query) {
-    if (this.dev) {
-      const compilationErr = await this.getCompilationError()
-      if (compilationErr) {
-        res.statusCode = 500
-        return renderErrorToHTML(compilationErr, req, res, pathname, query, this.renderOpts)
-      }
-    }
-
     try {
       return await renderErrorToHTML(err, req, res, pathname, query, this.renderOpts)
     } catch (err2) {
@@ -465,16 +408,6 @@ export default class Server {
 
     res.setHeader('Cache-Control', 'max-age=31536000, immutable')
     return true
-  }
-
-  async getCompilationError () {
-    if (!this.hotReloader) return
-
-    const errors = await this.hotReloader.getCompilationErrors()
-    if (!errors.size) return
-
-    // Return the very first error we found.
-    return Array.from(errors.values())[0][0]
   }
 
   send404 (res) {
